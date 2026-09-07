@@ -42,6 +42,9 @@ type CoordinateResult = {
   lon: number;
   country: { code: string; name: string } | null;
 };
+type GeoCountry = (typeof GEO)[number];
+
+const countryIndex = COUNTRIES_BY_CODE as Record<string, GeoCountry | undefined>;
 
 const VIEW_WIDTH = 1000;
 const VIEW_HEIGHT = 500;
@@ -91,13 +94,13 @@ function WorldMap({
         </defs>
         <rect width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#grid)" className="atlas-graticule" />
         <g className="atlas-countries">
-          {GEO.flatMap((country: any) =>
-            country.polygons.map((ring: number[][], ringIndex: number) => {
+          {GEO.flatMap((country) =>
+            country.rings.map((ring, ringIndex) => {
               const selected = selectedSet.has(country.code);
               return (
                 <path
                   key={`${country.code}-${ringIndex}`}
-                  d={ringToPath(ring)}
+                  d={ringToPath(ring.points)}
                   className={selected ? `country selected ${mode}` : "country"}
                 >
                   <title>{country.name}</title>
@@ -144,7 +147,9 @@ function CountryPicker({
 }) {
   const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes]);
   const selectedCountries = useMemo(
-    () => selectedCodes.map((code) => COUNTRIES_BY_CODE[code]).filter(Boolean),
+    () => selectedCodes
+      .map((code) => countryIndex[code])
+      .filter((country): country is GeoCountry => Boolean(country)),
     [selectedCodes],
   );
 
@@ -160,7 +165,7 @@ function CountryPicker({
 
       {selectedCountries.length > 0 && (
         <div className="selected-strip" aria-label="Selected countries">
-          {selectedCountries.map((country: any) => (
+          {selectedCountries.map((country) => (
             <button key={country.code} type="button" onClick={() => onToggle(country.code)}>
               <span>{country.code}</span>
               <X aria-hidden="true" />
@@ -177,7 +182,7 @@ function CountryPicker({
         <CommandInput placeholder="Search a country or ISO code" aria-label="Search countries" />
         <CommandList>
           <CommandEmpty>No country matches your search.</CommandEmpty>
-          {GEO.map((country: any) => {
+          {GEO.map((country) => {
             const active = selectedSet.has(country.code);
             return (
               <CommandItem
@@ -242,7 +247,9 @@ export default function LaloRandom() {
 
   const codes = mode === "include" ? includeCodes : excludeCodes;
   const selectedCountries = useMemo(
-    () => codes.map((code) => COUNTRIES_BY_CODE[code]).filter(Boolean),
+    () => codes
+      .map((code) => countryIndex[code])
+      .filter((country): country is GeoCountry => Boolean(country)),
     [codes],
   );
   const blocked = mode === "include" && selectedCountries.length === 0;
