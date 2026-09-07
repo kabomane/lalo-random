@@ -1,6 +1,6 @@
 # Lalo Random
 
-A map-first random coordinate generator built with React, Vite, Vinext and Tailwind CSS.
+A map-first random coordinate generator built with React, Vite and Tailwind CSS.
 
 ## Features
 
@@ -37,3 +37,6 @@ npm run build
 - `lib/coordinate-engine.js` — source geographic data and sampling logic
 - `components/ui` — reusable interface primitives
 
+## Deployment
+
+Every push to `main` runs a clean Vite build and deploys `dist/` to the live Firebase Hosting channel through GitHub Actions. The workflow can also be launched manually from the Actions tab.
