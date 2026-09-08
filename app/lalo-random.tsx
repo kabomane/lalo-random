@@ -292,9 +292,13 @@ function CountryPicker({
 function CoordinateReadout({
   result,
   onCopy,
+  onDraw,
+  drawDisabled,
 }: {
   result: CoordinateResult | null;
   onCopy: () => void;
+  onDraw: () => void;
+  drawDisabled: boolean;
 }) {
   return (
     <section className="readout" aria-live="polite">
@@ -321,10 +325,16 @@ function CoordinateReadout({
           <strong>{result ? formatCoordinate(result.lon) : "—"}</strong>
         </div>
       </div>
-      <Button className="copy-button" variant="outline" onClick={onCopy} disabled={!result}>
-        <Clipboard aria-hidden="true" />
-        Copier les coordonnées
-      </Button>
+      <div className="readout-actions">
+        <Button className="copy-button" variant="outline" onClick={onCopy} disabled={!result}>
+          <Clipboard aria-hidden="true" />
+          Copier les coordonnées
+        </Button>
+        <Button className="mobile-draw-button" onClick={onDraw} disabled={drawDisabled}>
+          <Dice5 aria-hidden="true" />
+          Tirer
+        </Button>
+      </div>
     </section>
   );
 }
@@ -482,7 +492,12 @@ export default function LaloRandom() {
             <span className="mode-badge"><Globe2 aria-hidden="true" /> {modeLabels[mode]}</span>
           </div>
           <WorldMap selectedCodes={codes} mode={mode} result={result} />
-          <CoordinateReadout result={result} onCopy={copyCoordinates} />
+          <CoordinateReadout
+            result={result}
+            onCopy={copyCoordinates}
+            onDraw={randomize}
+            drawDisabled={blocked}
+          />
         </section>
 
         <aside className="control-panel">
@@ -530,7 +545,7 @@ export default function LaloRandom() {
                 <CountryPicker selectedCodes={codes} onToggle={toggleCode} onClear={clearCodes} mode={mode} />
               )}
 
-              <div className="draw-zone">
+              <div className="draw-zone desktop-draw-zone">
                 {blocked && <p className="draw-warning"><Search aria-hidden="true" /> Sélectionnez au moins un pays.</p>}
                 <Button className="draw-button" size="lg" onClick={randomize} disabled={blocked}>
                   <Dice5 aria-hidden="true" /> Tirer des coordonnées
