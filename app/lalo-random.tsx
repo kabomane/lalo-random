@@ -326,15 +326,18 @@ function CoordinateReadout({
         </div>
       </div>
       <div className="readout-actions">
-        <Button className="copy-button" variant="outline" onClick={onCopy} disabled={!result}>
+        <Button className="copy-button" variant="outline" onClick={onCopy} disabled={!result} aria-label="Copier les coordonnées">
           <Clipboard aria-hidden="true" />
-          Copier les coordonnées
+          Copier
         </Button>
-        <Button className="mobile-draw-button" onClick={onDraw} disabled={drawDisabled}>
+        <Button className="action-draw-button" onClick={onDraw} disabled={drawDisabled} aria-label="Tirer des coordonnées">
           <Dice5 aria-hidden="true" />
           Tirer
         </Button>
       </div>
+      {drawDisabled && (
+        <p className="readout-warning"><Search aria-hidden="true" /> Sélectionnez au moins un pays pour effectuer le tirage.</p>
+      )}
     </section>
   );
 }
@@ -544,14 +547,6 @@ export default function LaloRandom() {
               {mode !== "world" && (
                 <CountryPicker selectedCodes={codes} onToggle={toggleCode} onClear={clearCodes} mode={mode} />
               )}
-
-              <div className="draw-zone desktop-draw-zone">
-                {blocked && <p className="draw-warning"><Search aria-hidden="true" /> Sélectionnez au moins un pays.</p>}
-                <Button className="draw-button" size="lg" onClick={randomize} disabled={blocked}>
-                  <Dice5 aria-hidden="true" /> Tirer des coordonnées
-                </Button>
-                <p>Sans compte ni suivi : le tirage s’effectue sur votre appareil.</p>
-              </div>
             </>
           ) : (
             <SettingsView settings={settings} onChange={setSettings} />

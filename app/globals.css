@@ -359,21 +359,55 @@ button { -webkit-tap-highlight-color: transparent; }
   letter-spacing: -0.035em;
 }
 
-.copy-button {
+.readout-actions {
   width: 100%;
-  min-height: 42px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.copy-button, .action-draw-button {
+  width: 100%;
+  min-height: 48px;
+}
+
+.copy-button {
   border-color: var(--border) !important;
   background: transparent !important;
   color: var(--foreground) !important;
 }
 .copy-button:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
 
-.readout-actions { width: 100%; }
-.mobile-draw-button { display: none !important; }
+.action-draw-button {
+  border-radius: var(--radius) !important;
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  font-weight: 800 !important;
+  transition: transform 160ms ease, box-shadow 160ms ease !important;
+}
+
+.action-draw-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(217, 255, 87, 0.14);
+}
+
+.readout-warning {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #ff8f7b;
+  font-size: 0.78rem;
+}
+
+.readout-warning svg { width: 14px; height: 14px; }
 
 .control-panel {
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
@@ -586,51 +620,6 @@ button { -webkit-tap-highlight-color: transparent; }
   text-align: center;
 }
 
-.draw-zone {
-  margin-top: auto;
-  padding: 26px clamp(22px, 2.5vw, 36px) 28px;
-  background: #0a1512;
-}
-
-.draw-button {
-  width: 100%;
-  min-height: 58px;
-  border-radius: 8px !important;
-  background: var(--primary) !important;
-  color: var(--primary-foreground) !important;
-  font-size: 0.94rem !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.025em;
-  text-transform: uppercase;
-  box-shadow: 0 0 0 rgba(217, 255, 87, 0);
-  transition: transform 160ms ease, box-shadow 160ms ease !important;
-}
-
-.draw-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(217, 255, 87, 0.16);
-}
-
-.draw-button svg { width: 20px !important; height: 20px !important; }
-
-.draw-zone > p:last-child {
-  margin: 12px 0 0;
-  color: #60756f;
-  font-size: 0.7rem;
-  text-align: center;
-}
-
-.draw-warning {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 10px;
-  color: #ff8f7b;
-  font-size: 0.8rem;
-}
-
-.draw-warning svg { width: 14px; }
-
 @media (max-width: 1100px) {
   .workspace { grid-template-columns: minmax(0, 1fr) 360px; }
   .map-panel { padding-left: 30px; padding-right: 30px; }
@@ -651,23 +640,10 @@ button { -webkit-tap-highlight-color: transparent; }
   .readout-location strong { font-size: 0.86rem; }
   .readout-values > div:not(.readout-location) strong { font-size: 0.86rem; }
   .readout-label, .readout-values > div:not(.readout-location) span { font-size: 0.6rem; }
-  .control-panel { min-height: auto; overflow: visible; border-top: 1px solid var(--border); border-left: 0; }
+  .control-panel { height: auto; max-height: none; min-height: auto; overflow: visible; border-top: 1px solid var(--border); border-left: 0; }
   .country-command [data-slot="command-input"] { font-size: 16px; }
-  .desktop-draw-zone { display: none; }
-  .readout-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .copy-button, .mobile-draw-button { min-height: 48px; }
-  .mobile-draw-button {
-    display: inline-flex !important;
-    border-radius: var(--radius) !important;
-    background: var(--primary) !important;
-    color: var(--primary-foreground) !important;
-    font-weight: 800 !important;
-  }
-  .mobile-draw-button svg { width: 17px; height: 17px; }
+  .readout-actions { gap: 10px; }
+  .action-draw-button svg { width: 17px; height: 17px; }
 }
 
 @media (max-width: 480px) {
@@ -678,7 +654,6 @@ button { -webkit-tap-highlight-color: transparent; }
   .atlas { min-height: 205px; }
   .atlas-empty { font-size: 0.75rem; }
   .control-section { padding: 26px 18px; }
-  .draw-zone { padding: 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
