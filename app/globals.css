@@ -498,7 +498,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .selected-strip button svg { width: 12px; }
 .selected-strip .clear-selection { border-color: transparent; color: var(--muted-foreground); }
 
-.country-command { border: 1px solid var(--border); background: #07110f !important; }
+.country-command { height: auto !important; border: 1px solid var(--border); background: #07110f !important; }
 .country-command [data-slot="command-input-wrapper"] { height: 44px; border-color: var(--border); }
 .country-command [data-slot="command-input"] { font-size: 0.875rem; }
 .country-command [data-slot="command-list"] { max-height: 132px; padding: 5px; }
