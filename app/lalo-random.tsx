@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Clipboard,
@@ -11,6 +11,7 @@ import {
   MapPin,
   RotateCcw,
   Search,
+  Settings2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,6 +38,11 @@ import {
 
 type Mode = "world" | "include" | "exclude";
 type Distribution = "equal" | "area";
+type PanelView = "draw" | "settings";
+type Settings = {
+  distribution: Distribution;
+  avoidOcean: boolean;
+};
 type CoordinateResult = {
   lat: number;
   lon: number;
@@ -45,6 +51,64 @@ type CoordinateResult = {
 type GeoCountry = (typeof GEO)[number];
 
 const countryIndex = COUNTRIES_BY_CODE as Record<string, GeoCountry | undefined>;
+const SETTINGS_KEY = "lalo-random:settings";
+
+const modeLabels: Record<Mode, string> = {
+  world: "Monde",
+  include: "Inclusion",
+  exclude: "Exclusion",
+};
+
+const frenchRegionNames = (() => {
+  try {
+    return new Intl.DisplayNames(["fr"], { type: "region" });
+  } catch {
+    return null;
+  }
+})();
+
+function countryLabel(country: Pick<GeoCountry, "code" | "name">) {
+  const translated = frenchRegionNames?.of(country.code);
+  return translated && translated !== country.code ? translated : country.name;
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .trim();
+}
+
+function countryRelevance(country: GeoCountry, query: string) {
+  const code = country.code.toLowerCase();
+  const frenchName = normalizeSearch(countryLabel(country));
+  const originalName = normalizeSearch(country.name);
+
+  if (code === query) return 0;
+  if (frenchName === query || originalName === query) return 1;
+  if (code.startsWith(query)) return 2;
+  if (frenchName.startsWith(query) || originalName.startsWith(query)) return 3;
+  if (frenchName.split(/\s+/).some((word) => word.startsWith(query))) return 4;
+  if (originalName.split(/\s+/).some((word) => word.startsWith(query))) return 5;
+  if (frenchName.includes(query) || originalName.includes(query)) return 6;
+  return null;
+}
+
+function readSettings(): Settings {
+  const defaults: Settings = { distribution: "equal", avoidOcean: false };
+  try {
+    const stored = window.localStorage.getItem(SETTINGS_KEY);
+    if (!stored) return defaults;
+    const parsed = JSON.parse(stored) as Partial<Settings>;
+    return {
+      distribution: parsed.distribution === "area" ? "area" : "equal",
+      avoidOcean: parsed.avoidOcean === true,
+    };
+  } catch {
+    return defaults;
+  }
+}
 
 const VIEW_WIDTH = 1000;
 const VIEW_HEIGHT = 500;
@@ -78,7 +142,7 @@ function WorldMap({
   const point = result ? project(result.lon, result.lat) : null;
 
   return (
-    <div className="atlas" aria-label="World map showing selected countries and generated coordinate">
+    <div className="atlas" aria-label="Carte du monde affichant les pays sélectionnés et les coordonnées tirées">
       <svg className="atlas-grid" viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`} role="img">
         <defs>
           <pattern id="grid" width="83.333" height="83.333" patternUnits="userSpaceOnUse">
@@ -103,7 +167,7 @@ function WorldMap({
                   d={ringToPath(ring.points)}
                   className={selected ? `country selected ${mode}` : "country"}
                 >
-                  <title>{country.name}</title>
+                  <title>{countryLabel(country)}</title>
                 </path>
               );
             }),
@@ -127,7 +191,7 @@ function WorldMap({
       {!result && (
         <div className="atlas-empty">
           <Crosshair aria-hidden="true" />
-          <span>Your next coordinate will appear here</span>
+          <span>Votre prochain point apparaîtra ici</span>
         </div>
       )}
     </div>
@@ -145,6 +209,7 @@ function CountryPicker({
   onClear: () => void;
   mode: Mode;
 }) {
+  const [query, setQuery] = useState("");
   const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes]);
   const selectedCountries = useMemo(
     () => selectedCodes
@@ -152,52 +217,73 @@ function CountryPicker({
       .filter((country): country is GeoCountry => Boolean(country)),
     [selectedCodes],
   );
+  const searchResults = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query);
+    if (!normalizedQuery) return [];
+
+    return GEO
+      .map((country) => ({ country, score: countryRelevance(country, normalizedQuery) }))
+      .filter((result): result is { country: GeoCountry; score: number } => result.score !== null)
+      .sort((a, b) => a.score - b.score || countryLabel(a.country).localeCompare(countryLabel(b.country), "fr"))
+      .slice(0, 3)
+      .map(({ country }) => country);
+  }, [query]);
 
   return (
     <section className="control-section country-section" aria-labelledby="country-title">
       <div className="section-heading">
         <div>
-          <span className="section-kicker">02 / Territory</span>
-          <h2 id="country-title">{mode === "include" ? "Countries in play" : "Countries off limits"}</h2>
+          <span className="section-kicker">02 / Territoire</span>
+          <h2 id="country-title">{mode === "include" ? "Pays à inclure" : "Pays à exclure"}</h2>
         </div>
         <span className="selection-count">{selectedCodes.length}</span>
       </div>
 
       {selectedCountries.length > 0 && (
-        <div className="selected-strip" aria-label="Selected countries">
+        <div className="selected-strip" aria-label="Pays sélectionnés">
           {selectedCountries.map((country) => (
             <button key={country.code} type="button" onClick={() => onToggle(country.code)}>
               <span>{country.code}</span>
               <X aria-hidden="true" />
-              <span className="sr-only">Remove {country.name}</span>
+              <span className="sr-only">Retirer {countryLabel(country)}</span>
             </button>
           ))}
           <button type="button" className="clear-selection" onClick={onClear}>
-            Clear
+            Tout retirer
           </button>
         </div>
       )}
 
-      <Command className="country-command">
-        <CommandInput placeholder="Search a country or ISO code" aria-label="Search countries" />
-        <CommandList>
-          <CommandEmpty>No country matches your search.</CommandEmpty>
-          {GEO.map((country) => {
-            const active = selectedSet.has(country.code);
-            return (
-              <CommandItem
-                key={country.code}
-                value={`${country.name} ${country.code}`}
-                onSelect={() => onToggle(country.code)}
-                className="country-option"
-              >
-                <span className="country-code">{country.code}</span>
-                <span>{country.name}</span>
-                {active && <Check className="country-check" aria-hidden="true" />}
-              </CommandItem>
-            );
-          })}
-        </CommandList>
+      <Command className="country-command" shouldFilter={false}>
+        <CommandInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Rechercher un pays ou un code ISO"
+          aria-label="Rechercher des pays"
+        />
+        {query.trim() && (
+          <CommandList>
+            {searchResults.length === 0 && <CommandEmpty>Aucun pays trouvé.</CommandEmpty>}
+            {searchResults.map((country) => {
+              const active = selectedSet.has(country.code);
+              return (
+                <CommandItem
+                  key={country.code}
+                  value={country.code}
+                  onSelect={() => {
+                    onToggle(country.code);
+                    setQuery("");
+                  }}
+                  className="country-option"
+                >
+                  <span className="country-code">{country.code}</span>
+                  <span>{countryLabel(country)}</span>
+                  {active && <Check className="country-check" aria-hidden="true" />}
+                </CommandItem>
+              );
+            })}
+          </CommandList>
+        )}
       </Command>
     </section>
   );
@@ -212,14 +298,20 @@ function CoordinateReadout({
 }) {
   return (
     <section className="readout" aria-live="polite">
-      <div className="readout-location">
-        <span className="readout-icon"><MapPin aria-hidden="true" /></span>
-        <div>
-          <span className="readout-label">Location</span>
-          <strong>{result?.country?.name ?? (result ? "Open ocean" : "Awaiting draw")}</strong>
+      <div className="readout-values">
+        <div className="readout-location">
+          <span className="readout-icon"><MapPin aria-hidden="true" /></span>
+          <div>
+            <span className="readout-label">Lieu</span>
+            <strong>
+              {result?.country
+                ? countryLabel(result.country)
+                : result
+                  ? "Océan"
+                  : "Aucun tirage"}
+            </strong>
+          </div>
         </div>
-      </div>
-      <div className="coordinate-pair">
         <div>
           <span>Latitude</span>
           <strong>{result ? formatCoordinate(result.lat) : "—"}</strong>
@@ -229,21 +321,92 @@ function CoordinateReadout({
           <strong>{result ? formatCoordinate(result.lon) : "—"}</strong>
         </div>
       </div>
-      <Button className="copy-button" variant="outline" size="icon-lg" onClick={onCopy} disabled={!result}>
+      <Button className="copy-button" variant="outline" onClick={onCopy} disabled={!result}>
         <Clipboard aria-hidden="true" />
-        <span className="sr-only">Copy coordinates</span>
+        Copier les coordonnées
       </Button>
     </section>
   );
 }
 
+function SettingsView({
+  settings,
+  onChange,
+}: {
+  settings: Settings;
+  onChange: (settings: Settings) => void;
+}) {
+  return (
+    <div className="settings-view">
+      <section className="control-section" aria-labelledby="ocean-title">
+        <div className="section-heading">
+          <div>
+            <span className="section-kicker">01 / Surface</span>
+            <h2 id="ocean-title">Présence de l’océan</h2>
+          </div>
+        </div>
+        <label className="switch-row">
+          <span>
+            <strong>Terres uniquement</strong>
+            <small>Relance automatiquement le tirage lorsqu’un point tombe dans l’océan.</small>
+          </span>
+          <Switch
+            checked={settings.avoidOcean}
+            onCheckedChange={(avoidOcean) => onChange({ ...settings, avoidOcean })}
+            aria-label="Générer uniquement des coordonnées terrestres"
+          />
+        </label>
+      </section>
+
+      <section className="control-section" aria-labelledby="distribution-title">
+        <div className="section-heading">
+          <div>
+            <span className="section-kicker">02 / Répartition</span>
+            <h2 id="distribution-title">Probabilité par pays</h2>
+          </div>
+        </div>
+        <RadioGroup
+          value={settings.distribution}
+          onValueChange={(distribution) => onChange({ ...settings, distribution: distribution as Distribution })}
+          className="distribution-options"
+        >
+          <label className={settings.distribution === "equal" ? "distribution-card active" : "distribution-card"}>
+            <RadioGroupItem value="equal" />
+            <span>
+              <strong>Chance égale</strong>
+              <small>Chaque pays sélectionné a la même probabilité d’être tiré.</small>
+            </span>
+          </label>
+          <label className={settings.distribution === "area" ? "distribution-card active" : "distribution-card"}>
+            <RadioGroupItem value="area" />
+            <span>
+              <strong>Pondération par superficie</strong>
+              <small>Les grands pays sont tirés plus souvent que les petits.</small>
+            </span>
+          </label>
+        </RadioGroup>
+      </section>
+
+      <p className="settings-note">Les paramètres sont enregistrés automatiquement sur cet appareil.</p>
+    </div>
+  );
+}
+
 export default function LaloRandom() {
+  const [panelView, setPanelView] = useState<PanelView>("draw");
   const [mode, setMode] = useState<Mode>("world");
   const [includeCodes, setIncludeCodes] = useState<string[]>([]);
   const [excludeCodes, setExcludeCodes] = useState<string[]>([]);
-  const [distribution, setDistribution] = useState<Distribution>("equal");
-  const [avoidOcean, setAvoidOcean] = useState(false);
+  const [settings, setSettings] = useState<Settings>(readSettings);
   const [result, setResult] = useState<CoordinateResult | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+      // The generator remains usable when browser storage is unavailable.
+    }
+  }, [settings]);
 
   const codes = mode === "include" ? includeCodes : excludeCodes;
   const selectedCountries = useMemo(
@@ -269,23 +432,23 @@ export default function LaloRandom() {
   const randomize = useCallback(() => {
     let next: CoordinateResult | null = null;
     if (mode === "include") {
-      next = randomPointInCountries(selectedCountries, distribution);
+      next = randomPointInCountries(selectedCountries, settings.distribution);
     } else if (mode === "exclude") {
-      next = randomPointOutsideCountries(selectedCountries, avoidOcean);
+      next = randomPointOutsideCountries(selectedCountries, settings.avoidOcean);
     } else {
-      next = randomLandAwareWorldPoint(avoidOcean);
+      next = randomLandAwareWorldPoint(settings.avoidOcean);
     }
     if (next && Number.isFinite(next.lat) && Number.isFinite(next.lon)) setResult(next);
-  }, [avoidOcean, distribution, mode, selectedCountries]);
+  }, [mode, selectedCountries, settings]);
 
   const copyCoordinates = useCallback(async () => {
     if (!result) return;
     const value = `${formatCoordinate(result.lat)}, ${formatCoordinate(result.lon)}`;
     try {
       await navigator.clipboard.writeText(value);
-      toast.success("Coordinates copied");
+      toast.success("Coordonnées copiées");
     } catch {
-      toast.error("Copy unavailable");
+      toast.error("Copie indisponible");
     }
   }, [result]);
 
@@ -293,103 +456,91 @@ export default function LaloRandom() {
     setMode("world");
     setIncludeCodes([]);
     setExcludeCodes([]);
-    setDistribution("equal");
-    setAvoidOcean(false);
     setResult(null);
   }, []);
 
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="Lalo Random home">
+        <a className="brand" href="#top" aria-label="Accueil de Lalo Random">
           <span className="brand-mark"><Compass aria-hidden="true" /></span>
           <span>LALO<span>/</span>RANDOM</span>
         </a>
         <div className="topbar-meta">
-          <span><span className="status-dot" /> Offline engine</span>
-          <span>{GEO.length} territories</span>
+          <span><span className="status-dot" /> Moteur local</span>
+          <span>{GEO.length} territoires</span>
           <Button variant="ghost" size="sm" onClick={reset}>
-            <RotateCcw aria-hidden="true" /> Reset
+            <RotateCcw aria-hidden="true" /> Réinitialiser
           </Button>
         </div>
       </header>
 
       <div className="workspace" id="top">
         <section className="map-panel">
-          <div className="map-heading">
-            <div>
-              <p>Coordinate generator</p>
-              <h1>Leave it to chance.</h1>
-            </div>
-            <span className="mode-badge"><Globe2 aria-hidden="true" /> {mode}</span>
+          <div className="map-toolbar">
+            <span>Carte du tirage</span>
+            <span className="mode-badge"><Globe2 aria-hidden="true" /> {modeLabels[mode]}</span>
           </div>
           <WorldMap selectedCodes={codes} mode={mode} result={result} />
           <CoordinateReadout result={result} onCopy={copyCoordinates} />
         </section>
 
         <aside className="control-panel">
-          <section className="control-section mode-section" aria-labelledby="mode-title">
-            <div className="section-heading">
-              <div>
-                <span className="section-kicker">01 / Method</span>
-                <h2 id="mode-title">Choose the rules</h2>
-              </div>
-            </div>
-            <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
-              <TabsList className="mode-tabs">
-                <TabsTrigger value="world">World</TabsTrigger>
-                <TabsTrigger value="include">Include</TabsTrigger>
-                <TabsTrigger value="exclude">Exclude</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <p className="mode-description">
-              {mode === "world" && "Draw from the entire planet, with or without ocean."}
-              {mode === "include" && "Every result stays inside one of your selected countries."}
-              {mode === "exclude" && "Draw anywhere except inside the countries you block."}
-            </p>
-          </section>
+          <nav className="panel-navigation" aria-label="Navigation du panneau">
+            <button
+              type="button"
+              className={panelView === "draw" ? "active" : ""}
+              onClick={() => setPanelView("draw")}
+            >
+              <Dice5 aria-hidden="true" /> Tirage
+            </button>
+            <button
+              type="button"
+              className={panelView === "settings" ? "active" : ""}
+              onClick={() => setPanelView("settings")}
+            >
+              <Settings2 aria-hidden="true" /> Paramètres
+            </button>
+          </nav>
 
-          {mode !== "world" && (
-            <CountryPicker selectedCodes={codes} onToggle={toggleCode} onClear={clearCodes} mode={mode} />
+          {panelView === "draw" ? (
+            <>
+              <section className="control-section mode-section" aria-labelledby="mode-title">
+                <div className="section-heading">
+                  <div>
+                    <span className="section-kicker">01 / Mode</span>
+                    <h2 id="mode-title">Zone du tirage</h2>
+                  </div>
+                </div>
+                <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+                  <TabsList className="mode-tabs">
+                    <TabsTrigger value="world">Monde</TabsTrigger>
+                    <TabsTrigger value="include">Inclure</TabsTrigger>
+                    <TabsTrigger value="exclude">Exclure</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <p className="mode-description">
+                  {mode === "world" && "Tirage sur l’ensemble du globe."}
+                  {mode === "include" && "Le point restera dans l’un des pays sélectionnés."}
+                  {mode === "exclude" && "Le point évitera tous les pays sélectionnés."}
+                </p>
+              </section>
+
+              {mode !== "world" && (
+                <CountryPicker selectedCodes={codes} onToggle={toggleCode} onClear={clearCodes} mode={mode} />
+              )}
+
+              <div className="draw-zone">
+                {blocked && <p className="draw-warning"><Search aria-hidden="true" /> Sélectionnez au moins un pays.</p>}
+                <Button className="draw-button" size="lg" onClick={randomize} disabled={blocked}>
+                  <Dice5 aria-hidden="true" /> Tirer des coordonnées
+                </Button>
+                <p>Sans compte ni suivi : le tirage s’effectue sur votre appareil.</p>
+              </div>
+            </>
+          ) : (
+            <SettingsView settings={settings} onChange={setSettings} />
           )}
-
-          <section className="control-section behavior-section" aria-labelledby="behavior-title">
-            <div className="section-heading compact">
-              <div>
-                <span className="section-kicker">{mode === "world" ? "02" : "03"} / Behavior</span>
-                <h2 id="behavior-title">Tune the draw</h2>
-              </div>
-            </div>
-
-            {mode === "include" ? (
-              <RadioGroup value={distribution} onValueChange={(value) => setDistribution(value as Distribution)} className="distribution-options">
-                <label className={distribution === "equal" ? "distribution-card active" : "distribution-card"}>
-                  <RadioGroupItem value="equal" />
-                  <span><strong>Equal chance</strong><small>Each selected country has the same odds.</small></span>
-                </label>
-                <label className={distribution === "area" ? "distribution-card active" : "distribution-card"}>
-                  <RadioGroupItem value="area" />
-                  <span><strong>Land weighted</strong><small>Larger countries are drawn more often.</small></span>
-                </label>
-              </RadioGroup>
-            ) : (
-              <label className="switch-row">
-                <span>
-                  <strong>Land only</strong>
-                  <small>Automatically reroll ocean coordinates.</small>
-                </span>
-                <Switch checked={avoidOcean} onCheckedChange={setAvoidOcean} aria-label="Generate land coordinates only" />
-              </label>
-            )}
-          </section>
-
-          <div className="draw-zone">
-            {blocked && <p className="draw-warning"><Search aria-hidden="true" /> Select at least one country first.</p>}
-            <Button className="draw-button" size="lg" onClick={randomize} disabled={blocked}>
-              <Dice5 aria-hidden="true" /> Draw a coordinate
-            </Button>
-            <p>No account. No tracking. The draw runs on your device.</p>
-          </div>
         </aside>
       </div>
     </main>
